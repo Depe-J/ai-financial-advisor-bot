@@ -1,0 +1,11 @@
+participant,background,numeric_clarity,numeric_trust,numeric_confidence,template_clarity,template_trust,template_confidence,llm_clarity,llm_trust,llm_confidence,preferred_mode,key_comment
+P1,Finance Student,3,2,3,4,4,4,5,5,5,LLM-Enhanced,"It feels more like real advice, not a formula."
+P2,Beginner,3,3,3,5,5,5,4,4,4,Template,"Clear and simple. I understood why it suggested BUY."
+P3,Finance Student,3,3,3,4,4,4,5,5,5,LLM-Enhanced,"The explanation connects the crossover to momentum nicely."
+P4,Beginner,2,2,2,4,4,4,5,5,5,LLM-Enhanced,Feels less robotic.
+P5,Finance Student,3,3,3,5,4,4,4,4,5,Template,"Structured and easy to follow."
+P6,Beginner,3,3,3,4,4,4,5,5,5,LLM-Enhanced,"The tone made it easier to trust."
+P7,Finance Student,4,3,3,4,4,4,5,5,5,LLM-Enhanced,"It explains the 'why' behind the signal."
+P8,Beginner,3,3,3,4,4,4,4,4,4,Template,"Simple and not overwhelming."
+P9,Finance Student,3,3,3,4,4,4,5,4,4,LLM-Enhanced,"More contextual than just numbers."
+P10,Beginner,3,3,3,5,5,4,5,4,5,LLM-Enhanced,"I would actually use this in real life."

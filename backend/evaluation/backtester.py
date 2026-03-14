@@ -117,9 +117,8 @@ def backtest_strategy(df: pd.DataFrame, initial_cash: float = 10000.0):
     rl_col = df['signal']
 
     # hybrid: use RL signal, but where RL says HOLD (0), use the MA signal instead
-    hybrid_col = rl_col.copy()
-    hybrid_col[hybrid_col == 0] = ma_col[hybrid_col == 0]
-
+    hybrid_col = ma_col.copy()
+    hybrid_col[(rl_col != 0) & (rl_col == ma_col)] = rl_col[(rl_col != 0) & (rl_col == ma_col)]
     # create three separate dataframes, one per strategy
     df_ma = df.copy(); df_ma['signal'] = ma_col
     df_rl = df.copy(); df_rl['signal'] = rl_col

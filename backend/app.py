@@ -43,7 +43,7 @@ def get_advice():
         stock_df = apply_moving_average_strategy(stock_df)
 
         q_bot = QLearningTrader()
-        stock_df = q_bot.train(stock_df, episodes=20)
+        stock_df = q_bot.train(stock_df, episodes=50)
 
         if not stock_df.empty and 'signal' in stock_df.columns:
             advice = generate_advice(stock_df, symbol=symbol)
@@ -82,7 +82,7 @@ def evaluate_strategy():
             return jsonify({"message": "No signal data available."}), 204
 
         q_bot = QLearningTrader()
-        stock_df = q_bot.train(stock_df, episodes=20)
+        stock_df = q_bot.train(stock_df, episodes=50)
 
         # backtest_strategy runs all 3 strategies and returns the hybrid results
         summary, trades, equity = backtest_strategy(stock_df)

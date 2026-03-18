@@ -84,8 +84,9 @@ def evaluate_strategy():
         q_bot = QLearningTrader()
         stock_df = q_bot.train(stock_df, episodes=50)
 
-        # backtest_strategy runs all 3 strategies and returns the hybrid results
-        summary, trades, equity = backtest_strategy(stock_df)
+        # Pass ticker to backtest_strategy so results are logged to experiment_log.csv
+        # Previously ticker was not passed and results were only visible in the terminal.
+        summary, trades, equity = backtest_strategy(stock_df, ticker=symbol)
 
         return jsonify({
             "summary": summary,

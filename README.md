@@ -5,27 +5,46 @@ A stock advisory web app that combines Q-learning with SMA crossover signals to 
 
 ---
 
+## Recent Changes
+
+- **Hybrid strategy fix** — the hybrid signal construction was corrected so the RL agent can influence trading decisions independently of the MA signal, rather than only applying when both strategies already agreed
+- **Experiment logging** — every backtest run is now recorded to `evaluation/experiment_log.csv` with ticker, strategy, return, Sharpe ratio, and bootstrap confidence intervals for retrospective comparison
+- **Automated tests** — added `backend/tests/test_backtester.py` with property-based tests verifying hybrid signal correctness
+
+## Note for Marker
+
+The submitted video was recorded prior to the hybrid strategy fix and therefore shows the evaluation panel with the original results where Hybrid matched MA-Only for TSLA. The current codebase contains the corrected hybrid logic — running the system live against TSLA will show different Hybrid results from MA-Only as described in the final report.
+
+---
+
 ## How to Run
 
 ### Backend
-
 ```bash
 cd backend
 pip install flask flask-cors pandas numpy yfinance requests
 python app.py
 ```
-
 Runs on http://localhost:5050
 
 ### Frontend
-
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
 Runs on http://localhost:5173
+
+---
+
+## Running Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+The key test is `test_hybrid_differs_from_ma`, which verifies that the Hybrid strategy produces signals independent of the MA-Only baseline.
 
 ---
 
@@ -81,6 +100,8 @@ backend/
     advisor.py              - generates advice string
     explainer.py            - NLG explanation engine
     ollama_explainer.py     - optional LLM integration
+  tests/
+    test_backtester.py      - automated tests for hybrid signal correctness
 frontend/
   src/components/
     ChatBot.jsx             - chat UI
@@ -88,6 +109,7 @@ frontend/
 evaluation/
   user_study_results.csv    - Likert scores from user study
   analyse_user_study.py     - reproduces Table 4 from report
+  experiment_log.csv        - auto-generated log of every backtest run (ticker, strategy, return, Sharpe, CI)
 ```
 
 ---

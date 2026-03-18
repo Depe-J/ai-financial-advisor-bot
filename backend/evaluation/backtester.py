@@ -1,7 +1,10 @@
 import logging
+import csv
+import os
 import pandas as pd
 import numpy as np
 import math
+from datetime import datetime
 
 # import all the metric functions from metrics.py
 # keeping calculations in one place makes it easier to update
@@ -20,6 +23,50 @@ from evaluation.metrics import (
 log = logging.getLogger(__name__)
 
 TRANSACTION_COST = 0.001
+
+# ─── EXPERIMENT LOG ───────────────────────────────────────────────────────────
+# Path for CSV experiment log.
+# Previously, RL experiment results were only observed in the terminal and not
+# saved, making it impossible to compare reward configurations retrospectively.
+# This log ensures every backtest run is recorded so results can be compared.
+EXPERIMENT_LOG_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "evaluation", "experiment_log.csv"
+)
+EXPERIMENT_LOG_FIELDS = [
+    "timestamp", "ticker", "strategy",
+    "return_pct", "sharpe", "max_drawdown_pct",
+    "win_rate_pct", "total_trades",
+    "sharpe_ci_low", "sharpe_ci_high",
+    "return_ci_low", "return_ci_high",
+    "n_bootstrap", "seed",
+]
+
+def _log_experiment(ticker, strategy, return_pct, sharpe, mdd, wr, trades,
+                    sharpe_ci, return_ci):
+    """Append one row to the experiment CSV log."""
+    log_path = os.path.normpath(EXPERIMENT_LOG_PATH)
+    write_header = not os.path.exists(log_path)
+    with open(log_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=EXPERIMENT_LOG_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow({
+            "timestamp":       datetime.utcnow().isoformat(),
+            "ticker":          ticker,
+            "strategy":        strategy,
+            "return_pct":      round(return_pct, 4),
+            "sharpe":          round(sharpe, 4),
+            "max_drawdown_pct":round(mdd * 100, 4),
+            "win_rate_pct":    round(wr * 100, 4),
+            "total_trades":    trades,
+            "sharpe_ci_low":   round(sharpe_ci[0], 4),
+            "sharpe_ci_high":  round(sharpe_ci[1], 4),
+            "return_ci_low":   round(return_ci[0] * 100, 4),
+            "return_ci_high":  round(return_ci[1] * 100, 4),
+            "n_bootstrap":     N_BOOTSTRAP,
+            "seed":            42,
+        })
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def _run_single(df: pd.DataFrame, initial_cash: float = 10000.0):
@@ -94,12 +141,13 @@ def _run_single(df: pd.DataFrame, initial_cash: float = 10000.0):
     return trade_log, equity_curve, portfolio_values, round(returns_pct, 2), cash
 
 
-def backtest_strategy(df: pd.DataFrame, initial_cash: float = 10000.0):
+def backtest_strategy(df: pd.DataFrame, initial_cash: float = 10000.0,
+                      ticker: str = "UNKNOWN"):
     # runs the backtest for all 3 strategies and returns results for the hybrid
     # the three strategies are:
     #   1. MA-Only  - just uses the moving average crossover signal
     #   2. RL-Only  - just uses the Q-learning signal
-    #   3. Hybrid   - uses RL signal but falls back to MA signal when RL says HOLD
+    #   3. Hybrid   - uses RL signal wherever RL is non-zero, MA signal otherwise
     # this lets us compare all three in the evaluation panel
 
     df = df.copy().reset_index(drop=True)
@@ -116,9 +164,25 @@ def backtest_strategy(df: pd.DataFrame, initial_cash: float = 10000.0):
     ma_col = df['ma_signal'] if has_ma_signal else df['signal']
     rl_col = df['signal']
 
-    # hybrid: use RL signal, but where RL says HOLD (0), use the MA signal instead
+    # ── HYBRID SIGNAL CONSTRUCTION (FIXED) ───────────────────────────────────
+    # PREVIOUS (BUGGY) VERSION:
+    #   hybrid_col = ma_col.copy()
+    #   hybrid_col[(rl_col != 0) & (rl_col == ma_col)] = rl_col[...]
+    #
+    # The bug: only replaced values where RL and MA *already agreed*, so any
+    # disagreement silently fell back to MA.  The result was that the Hybrid
+    # strategy produced identical signals — and therefore identical results —
+    # to MA-Only across every tested equity (TSLA, BABA, GOOG).
+    #
+    # FIXED VERSION:
+    # Start from the MA signal as the baseline (it always gives a direction),
+    # then override with the RL signal wherever RL has a non-zero opinion.
+    # This means RL can now independently influence the final trade decision
+    # even when it disagrees with MA.
     hybrid_col = ma_col.copy()
-    hybrid_col[(rl_col != 0) & (rl_col == ma_col)] = rl_col[(rl_col != 0) & (rl_col == ma_col)]
+    hybrid_col[rl_col != 0] = rl_col[rl_col != 0]
+    # ─────────────────────────────────────────────────────────────────────────
+
     # create three separate dataframes, one per strategy
     df_ma = df.copy(); df_ma['signal'] = ma_col
     df_rl = df.copy(); df_rl['signal'] = rl_col
@@ -154,6 +218,25 @@ def backtest_strategy(df: pd.DataFrame, initial_cash: float = 10000.0):
     profitable = sum(1 for t in hyb_trades if t.get("pnl", 0) > 0)
     losing = sum(1 for t in hyb_trades if t.get("pnl", 0) < 0)
 
+    # ── LOG ALL THREE STRATEGIES TO EXPERIMENT CSV ────────────────────────────
+    # Previously results were only visible in the terminal.
+    # Now every run is recorded so configurations can be compared retrospectively.
+    try:
+        ma_sc  = bootstrap_ci(np.diff(np.array(ma_pv,  dtype=float)) /
+                               (np.array(ma_pv,  dtype=float)[:-1] + 1e-8), sharpe_ratio)
+        ma_rc  = bootstrap_ci(np.diff(np.array(ma_pv,  dtype=float)) /
+                               (np.array(ma_pv,  dtype=float)[:-1] + 1e-8), total_return_from_daily)
+        rl_sc  = bootstrap_ci(np.diff(np.array(rl_pv,  dtype=float)) /
+                               (np.array(rl_pv,  dtype=float)[:-1] + 1e-8), sharpe_ratio)
+        rl_rc  = bootstrap_ci(np.diff(np.array(rl_pv,  dtype=float)) /
+                               (np.array(rl_pv,  dtype=float)[:-1] + 1e-8), total_return_from_daily)
+        _log_experiment(ticker, "MA-Only",       ma_ret,  ma_sharpe,  ma_mdd,  ma_wr,  len(ma_trades),  ma_sc,  ma_rc)
+        _log_experiment(ticker, "RL-Only",       rl_ret,  rl_sharpe,  rl_mdd,  rl_wr,  len(rl_trades),  rl_sc,  rl_rc)
+        _log_experiment(ticker, "Hybrid",        hyb_ret, hyb_sharpe, hyb_mdd, hyb_wr, len(hyb_trades), sharpe_ci, return_ci)
+    except Exception as e:
+        log.warning(f"Experiment log write failed: {e}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     summary = {
         "Initial Cash": round(initial_cash, 2),
         "Final Value": round(hyb_cash, 2),
@@ -168,9 +251,9 @@ def backtest_strategy(df: pd.DataFrame, initial_cash: float = 10000.0):
         "Return 95% CI": f"[{return_ci[0]*100:.1f}%, {return_ci[1]*100:.1f}%]",
         "Bootstrap N": N_BOOTSTRAP,
         "Strategy Comparison": [
-            {"Strategy": "MA-Only", "Return (%)": round(ma_ret, 2), "Sharpe": round(ma_sharpe, 2), "Max DD (%)": round(ma_mdd * 100, 2), "Win Rate (%)": round(ma_wr * 100, 2), "Trades": len(ma_trades)},
-            {"Strategy": "RL-Only", "Return (%)": round(rl_ret, 2), "Sharpe": round(rl_sharpe, 2), "Max DD (%)": round(rl_mdd * 100, 2), "Win Rate (%)": round(rl_wr * 100, 2), "Trades": len(rl_trades)},
-            {"Strategy": "Hybrid (Final)", "Return (%)": hyb_ret, "Sharpe": round(hyb_sharpe, 2), "Max DD (%)": round(hyb_mdd * 100, 2), "Win Rate (%)": round(hyb_wr * 100, 2), "Trades": len(hyb_trades)},
+            {"Strategy": "MA-Only",       "Return (%)": round(ma_ret, 2),  "Sharpe": round(ma_sharpe, 2),  "Max DD (%)": round(ma_mdd * 100, 2),  "Win Rate (%)": round(ma_wr * 100, 2),  "Trades": len(ma_trades)},
+            {"Strategy": "RL-Only",       "Return (%)": round(rl_ret, 2),  "Sharpe": round(rl_sharpe, 2),  "Max DD (%)": round(rl_mdd * 100, 2),  "Win Rate (%)": round(rl_wr * 100, 2),  "Trades": len(rl_trades)},
+            {"Strategy": "Hybrid (Final)","Return (%)": hyb_ret,           "Sharpe": round(hyb_sharpe, 2), "Max DD (%)": round(hyb_mdd * 100, 2), "Win Rate (%)": round(hyb_wr * 100, 2), "Trades": len(hyb_trades)},
         ],
     }
 

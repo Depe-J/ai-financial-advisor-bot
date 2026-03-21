@@ -18,9 +18,13 @@ SMA10/SMA50 is a common short/mid-term crossover pair in retail trading. I tried
 
 ---
 
-## Why 6 months of data?
+## Why does the advice endpoint use 6 months?
 
-Practical constraint — yfinance returns clean daily OHLCV data reliably for 6mo without any gaps or adjusted-price weirdness. Longer windows introduced some data quality issues with certain tickers. It's also a realistic window for a short-term retail trading strategy.
+Practical constraint — yfinance returns clean daily OHLCV data reliably for 6mo without any gaps or adjusted-price weirdness. Longer windows introduced some data quality issues with certain tickers. It's also a realistic window for a short-term retail trading strategy. The advice endpoint only needs recent data to generate the current BUY/SELL/HOLD signal, so 6 months is the right call there.
+
+## Why does the evaluation endpoint use 2 years?
+
+The backtester needs a longer window to produce meaningful results. 2 years gives roughly 500 trading days. Of that, 70% (~350 days) is used to train the RL agent and the final 30% (~150 days) is held out as the test window — the backtest only runs on that held-out portion so there's no look-ahead bias. Running the full pipeline on 6 months would give too few trades to draw any real conclusions from. The confidence threshold calibration (0-20 low, 21-50 medium, >50 high) was also derived from 2 years of MA divergence data across AAPL, TSLA and NFLX.
 
 ---
 
